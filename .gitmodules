@@ -1,0 +1,3 @@
+[submodule "resourcelib-sys/extern/ZHMTools"]
+	path = resourcelib-sys/extern/ZHMTools
+	url = https://github.com/dafitius/ZHMTools

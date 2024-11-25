@@ -1,0 +1,13 @@
+[package]
+authors = ["Dafitius"]
+categories = ["api-bindings"]
+description = "Unofficial Rust bindings for the ResourceLib library"
+edition = "2021"
+license = "GLPL"
+name = "resourcelib-ffi"
+readme = "README.md"
+version = "1.0.0"
+
+[dependencies]
+resourcelib-sys = {path = "../resourcelib-sys"}
+thiserror = "2.0.3"
