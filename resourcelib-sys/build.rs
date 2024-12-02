@@ -121,7 +121,7 @@ fn copy_shared_libraries<P: AsRef<Path>, Q: AsRef<Path>>(
 
         if path.is_file() {
             if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
-                if ext.eq_ignore_ascii_case("so") || ext.eq_ignore_ascii_case("dll") {
+                if ext.eq_ignore_ascii_case("so") || ext.eq_ignore_ascii_case("dll") || ext.eq_ignore_ascii_case("lib") {
                     let file_name = match path.file_name() {
                         Some(name) => name,
                         None => continue, // Skip if filename is not valid
