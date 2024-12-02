@@ -1,4 +1,6 @@
-use std::env;
+// mod build;
+
+use std::{env, fs, io};
 use std::path::{Path, PathBuf};
 use bindgen::callbacks::{AttributeInfo, ParseCallbacks};
 use cmake::Config;
@@ -13,47 +15,37 @@ impl ParseCallbacks for ResourceLibCallbacks {
     }
 }
 
+macro_rules! warn {
+    ($($tokens: tt)*) => {
+        println!("cargo:warning={}", format!($($tokens)*))
+    }
+}
+
 fn main() {
-    let zhmtools_path = Path::new("extern").join("ZHMTools").canonicalize().unwrap();
-    let rlib_path = zhmtools_path.join("Libraries").join("ResourceLib");
-    let rlib_include_path = rlib_path.join("Include");
+    let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
 
-    let opt_level = env::var("OPT_LEVEL").unwrap_or_else(|_| "0".to_string());
-
-    let build_profile = if opt_level == "0" {
-        "Debug"
-    } else {
-        "Release"
+    let rlib_path = Path::new("extern").join("ResourceLib").canonicalize().unwrap();
+    let rlib_lib_path = if cfg!(windows) {
+        rlib_path.join("ResourceLib-win-x64")
+    }else{
+        rlib_path.join("ResourceLib-linux-x64")
     };
 
-    let targets = ["ResourceLib_HM2016", "ResourceLib_HM2", "ResourceLib_HM3"];
+    copy_shared_libraries(&rlib_lib_path, &out_path).unwrap();
 
-    let out_path = Config::new(&zhmtools_path)
-        .profile(build_profile)
-        .define("ZHM_BUILD_TOOLS", "OFF")
-        .no_default_c_flags(true)
-        .no_default_cxx_flags(true)
-        .build_target(targets.join(";").as_str())
-        .build();
-
-    // Determine the output directory based on the platform and build profile
-    let build_path = out_path.join("build");
-    let lib_dir = if cfg!(windows) {
-        build_path.join(build_profile)
-    } else {
-        build_path.clone()
-    };
-
+    println!("cargo:lib_path={}", out_path.display());
+    
     println!(
         "cargo:rustc-link-search=native={}",
-        lib_dir.display()
+        out_path.display()
     );
 
+    let targets = ["ResourceLib_HM2016", "ResourceLib_HM2", "ResourceLib_HM3"];
     for target in &targets {
         println!("cargo:rustc-link-lib=dylib={}", target);
     }
 
-    println!("cargo:include={}", rlib_include_path.display());
+    let rlib_include_path = rlib_lib_path.join("Include");
 
     let bindings = bindgen::Builder::default()
         .clang_arg("-x")
@@ -87,8 +79,60 @@ fn main() {
         .generate()
         .expect("Unable to generate bindings");
 
-    let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
     bindings
         .write_to_file(out_path.join("bindings.rs"))
         .expect("Couldn't write bindings!");
+
+}
+
+fn copy_shared_libraries<P: AsRef<Path>, Q: AsRef<Path>>(
+    source: P,
+    destination: Q,
+) -> io::Result<()> {
+    let source_path = source.as_ref();
+    let destination_path = destination.as_ref();
+
+    if !source_path.exists() {
+        return Err(io::Error::new(
+            io::ErrorKind::NotFound,
+            format!("Source directory {:?} does not exist.", source_path),
+        ));
+    }
+
+    if !source_path.is_dir() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("{:?} is not a directory.", source_path),
+        ));
+    }
+
+    if !destination_path.exists() {
+        fs::create_dir_all(destination_path)?;
+    } else if !destination_path.is_dir() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("{:?} is not a directory.", destination_path),
+        ));
+    }
+
+    for entry in fs::read_dir(source_path)? {
+        let entry = entry?;
+        let path = entry.path();
+
+        if path.is_file() {
+            if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
+                if ext.eq_ignore_ascii_case("so") || ext.eq_ignore_ascii_case("dll") {
+                    let file_name = match path.file_name() {
+                        Some(name) => name,
+                        None => continue, // Skip if filename is not valid
+                    };
+                    let dest_file = destination_path.join(file_name);
+
+                    fs::copy(&path, &dest_file)?;
+                }
+            }
+        }
+    }
+
+    Ok(())
 }

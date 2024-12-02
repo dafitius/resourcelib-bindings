@@ -7,7 +7,14 @@ license = "GLPL"
 name = "resourcelib-ffi"
 readme = "README.md"
 version = "1.0.0"
+build = "build.rs"
+links = "resourcelib"
 
 [dependencies]
-resourcelib-sys = {path = "../resourcelib-sys"}
+resourcelib-sys = { path = "../resourcelib-sys" }
 thiserror = "2.0.3"
+
+[features]
+default = []
+force-from-source = ["resourcelib-sys/build"]
+
