@@ -135,7 +135,7 @@ fn generate_enums<W: io::Write>(header_content: &str, buffer: &mut W) -> io::Res
             remove_common_prefix_from_enum_variants(&mut fields);
 
 
-            writeln!(buffer, "#[derive(Debug, serde::Serialize, serde::Deserialize)]")?;
+            writeln!(buffer, "#[derive(Debug, Serialize, Deserialize)]")?;
             writeln!(buffer, "#[serde(rename = \"{}\")]", original_enum_name)?;
             writeln!(buffer, "pub enum {} {{", rust_enum_name)?;
             for (original_field, rust_field, val_str) in fields {
@@ -227,7 +227,7 @@ fn generate_properties<W: io::Write>(header_content: &str, buffer: &mut W, modul
             }
 
             
-            writeln!(buffer, "#[derive(Debug, serde::Serialize, serde::Deserialize)]")?;
+            writeln!(buffer, "#[derive(Debug, Serialize, Deserialize)]")?;
             writeln!(buffer, "#[serde(rename = \"{}\")]", original_class_name)?;
             writeln!(buffer, "pub struct {} {{", rust_class_name)?;
 

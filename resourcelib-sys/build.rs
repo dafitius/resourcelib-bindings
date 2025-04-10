@@ -34,7 +34,10 @@ fn main() {
 
     let targets = ["ResourceLib_HM2016", "ResourceLib_HM2", "ResourceLib_HM3"];
 
-    let zhmtools_path = Path::new("../extern").join("ZHMTools").canonicalize().unwrap();
+    let mut zhmtools_path = Path::new("../extern").join("ZHMTools").canonicalize().unwrap();
+    if cfg!(windows) { //We need to prevent a \\?\ prefix on the path, because MSVC compilers don't support UNC paths
+        zhmtools_path = Path::new(&zhmtools_path.display().to_string().replace("\\\\?\\", "")).to_path_buf();
+    }
     let local_rlib_path = zhmtools_path.join("Libraries").join("ResourceLib");
 
     let lib_path_override = env::var("RESOURCELIB_RELEASE_OVERRIDE").ok();
@@ -119,12 +122,23 @@ fn build_from_source<P: AsRef<Path>>(path: P, targets: &[&str; 3]) -> Result<Pat
     };
 
 
-    let out_path = Config::new(&path)
+    let mut config = Config::new(&path);
+    let mut config = config
         .profile(build_profile)
-        .define("ZHM_BUILD_TOOLS", "OFF")
-        .no_default_flags(true)
-        .build_target(targets.join(";").as_str())
-        .build();
+        .define("ZHM_BUILD_TOOLS", "OFF");
+
+    // Use platform-specific compiler flags
+    if cfg!(windows) {
+        config = config
+            .cxxflag("/std:c++latest")
+            .cxxflag("/EHsc");
+    } else {
+        config = config
+            .no_default_flags(true);
+    }
+
+    let out_path = config.build_target(targets.join(";").as_str()).build();
+
 
     // Determine the output directory based on the platform and build profile
     let build_path = out_path.join("build");

@@ -12,6 +12,5 @@ serde = { version = "1.0.215", features = ["derive"]}
 [build-dependencies]
 cc = "1.2.1"
 cmake = "0.1.54"
-#bindgen = { version = "0.70.1"}
-bindgen = {git = "https://github.com/rust-lang/rust-bindgen", branch = "main"}
+bindgen = { version = "0.71.1"}
 num_cpus = "1.16.0"
