@@ -1,10 +1,17 @@
+#[cfg(feature = "codegen")]
+pub mod codegen;
+
+
+
 extern crate resourcelib_sys;
 
 // Optionally, bring the necessary items into scope
 use resourcelib_sys::*;
 use std::ffi::{CStr, CString};
+use std::marker::PhantomData;
 use std::path::Path;
 use thiserror::Error;
+use crate::codegen::ResourceLibResource;
 
 #[derive(Debug, Error)]
 pub enum ResourceLibError {
@@ -37,6 +44,10 @@ pub enum ResourceLibError {
 
     #[error("UTF-8 conversion error: {0}")]
     Utf8Error(#[from] std::str::Utf8Error),
+
+    #[cfg(feature = "codegen")]
+    #[error("serde json error: {0}")]
+    SerdeError(#[from] serde_json::Error),
 }
 
 #[derive(Debug, Copy, Clone)]

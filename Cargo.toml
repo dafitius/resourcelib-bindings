@@ -3,4 +3,5 @@ resolver = "2"
 members = [
     "resourcelib-ffi",
     "resourcelib-sys",
+    "glacier-codegen"
 ]

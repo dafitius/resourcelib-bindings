@@ -1,7 +1,9 @@
 // mod build;
 
 use std::{env, fs, io};
+use std::error::Error;
 use std::path::{Path, PathBuf};
+use bindgen::{BindgenError, Bindings};
 use bindgen::callbacks::{AttributeInfo, ParseCallbacks};
 use cmake::Config;
 
@@ -21,37 +23,64 @@ macro_rules! warn {
     }
 }
 
+macro_rules! err {
+    ($($tokens: tt)*) => {
+        panic!("{}", format!($($tokens)*))
+    }
+}
+
 fn main() {
-    let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
-
-    let rlib_path = Path::new("extern").join("ResourceLib").canonicalize().unwrap();
-    let rlib_lib_path = if cfg!(windows) {
-        rlib_path.join("ResourceLib-win-x64")
-    }else{
-        rlib_path.join("ResourceLib-linux-x64")
-    };
-
-    copy_shared_libraries(&rlib_lib_path, &out_path).unwrap();
-
-    println!("cargo:lib_path={}", out_path.display());
-    
-    println!(
-        "cargo:rustc-link-search=native={}",
-        out_path.display()
-    );
+    println!("cargo:rerun-if-changed=build.rs"); //prevent this file from running every time
 
     let targets = ["ResourceLib_HM2016", "ResourceLib_HM2", "ResourceLib_HM3"];
+
+    let zhmtools_path = Path::new("../extern").join("ZHMTools").canonicalize().unwrap();
+    let local_rlib_path = zhmtools_path.join("Libraries").join("ResourceLib");
+
+    let lib_path_override = env::var("RESOURCELIB_RELEASE_OVERRIDE").ok();
+
+    let custom_install = lib_path_override.map(|path| PathBuf::from(&path));
+
+    let lib_path = match &custom_install{
+        Some(path) => {
+            path.to_owned()
+        },
+        None => {
+            build_from_source(zhmtools_path, &targets).unwrap_or_else(|e|err!("{}", e))
+        }
+    };
+
+    let rlib_include_path =  match &custom_install {
+        Some(path) => {
+            path.to_owned()
+        },
+        None => {local_rlib_path}
+    }.join("Include");
+
+    println!("cargo:lib_path={}", lib_path.display());
+
+    println!(
+        "cargo:rustc-link-search=native={}",
+        lib_path.display()
+    );
+
     for target in &targets {
         println!("cargo:rustc-link-lib=dylib={}", target);
     }
 
-    let rlib_include_path = rlib_lib_path.join("Include");
+    let out_path = env::var("OUT_DIR").map(|dir| PathBuf::from(dir)).expect("OUT_DIR not set");
+    let bindings = generate_bindings(rlib_include_path).expect("Unable to generate bindings");
+    bindings
+        .write_to_file(out_path.join("bindings.rs"))
+        .expect("Couldn't write bindings!");
+}
 
-    let bindings = bindgen::Builder::default()
+fn generate_bindings<P: AsRef<Path>>(include_path: P) -> Result<Bindings, BindgenError> {
+   bindgen::Builder::default()
         .clang_arg("-x")
         .clang_arg("c++")
         .clang_arg("-std=c++23")
-        .clang_arg(format!("-I{}", rlib_include_path.display()))
+        .clang_arg(format!("-I{}", include_path.as_ref().display()))
         .header("wrapper.h")
         .parse_callbacks(Box::new(ResourceLibCallbacks))
         // Allowlist functions
@@ -77,62 +106,33 @@ fn main() {
         .blocklist_item("__.*")
         .blocklist_item("_.*")
         .generate()
-        .expect("Unable to generate bindings");
-
-    bindings
-        .write_to_file(out_path.join("bindings.rs"))
-        .expect("Couldn't write bindings!");
-
 }
 
-fn copy_shared_libraries<P: AsRef<Path>, Q: AsRef<Path>>(
-    source: P,
-    destination: Q,
-) -> io::Result<()> {
-    let source_path = source.as_ref();
-    let destination_path = destination.as_ref();
+fn build_from_source<P: AsRef<Path>>(path: P, targets: &[&str; 3]) -> Result<PathBuf, Box<dyn Error>> {
 
-    if !source_path.exists() {
-        return Err(io::Error::new(
-            io::ErrorKind::NotFound,
-            format!("Source directory {:?} does not exist.", source_path),
-        ));
-    }
+    let opt_level = env::var("OPT_LEVEL").unwrap_or_else(|_| "0".to_string());
 
-    if !source_path.is_dir() {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            format!("{:?} is not a directory.", source_path),
-        ));
-    }
+    let build_profile = if opt_level == "0" {
+        "Debug"
+    } else {
+        "Release"
+    };
 
-    if !destination_path.exists() {
-        fs::create_dir_all(destination_path)?;
-    } else if !destination_path.is_dir() {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            format!("{:?} is not a directory.", destination_path),
-        ));
-    }
 
-    for entry in fs::read_dir(source_path)? {
-        let entry = entry?;
-        let path = entry.path();
+    let out_path = Config::new(&path)
+        .profile(build_profile)
+        .define("ZHM_BUILD_TOOLS", "OFF")
+        .no_default_flags(true)
+        .build_target(targets.join(";").as_str())
+        .build();
 
-        if path.is_file() {
-            if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
-                if ext.eq_ignore_ascii_case("so") || ext.eq_ignore_ascii_case("dll") || ext.eq_ignore_ascii_case("lib") {
-                    let file_name = match path.file_name() {
-                        Some(name) => name,
-                        None => continue, // Skip if filename is not valid
-                    };
-                    let dest_file = destination_path.join(file_name);
+    // Determine the output directory based on the platform and build profile
+    let build_path = out_path.join("build");
+    let lib_dir = if cfg!(windows) {
+        build_path.join(build_profile)
+    } else {
+        build_path.clone()
+    };
 
-                    fs::copy(&path, &dest_file)?;
-                }
-            }
-        }
-    }
-
-    Ok(())
+    Ok(lib_dir)
 }
