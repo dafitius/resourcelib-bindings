@@ -11,7 +11,6 @@ use std::ffi::{CStr, CString};
 use std::marker::PhantomData;
 use std::path::Path;
 use thiserror::Error;
-use crate::codegen::ResourceLibResource;
 
 #[derive(Debug, Error)]
 pub enum ResourceLibError {

@@ -3,5 +3,8 @@ resolver = "2"
 members = [
     "resourcelib-ffi",
     "resourcelib-sys",
-    "glacier-codegen"
+
+    # Disabled due to very poor compile times
+    # MSVC compiles the codebase to a 4GB+ .rlib, which is too large to link to anything
+#    "glacier-codegen"
 ]
